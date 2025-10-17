@@ -3,52 +3,47 @@ import axios from "axios";
 import crypto from "crypto";
 
 const app = express();
-app.use(express.json());
+const port = process.env.PORT || 3000;
 
-// 🔑 Substitua pelos seus valores da Binance
-const BINANCE_API_KEY = "PRHyrbImXb0L8DAtNDg4aNDVvEtOCJIXGUKpQ27TLMTamg6171YhWGPYZ9owldSA";
-const BINANCE_API_SECRET = "9tXOlBB2cmatCGtEm8CMJEUU2swZ0wM6yyPcoyu8V33L15U7qakgOi3xbkVCNMRN";
+// 🔐 Variáveis de ambiente (Render)
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const BINANCE_API_KEY = process.env.BINANCE_API_KEY;
+const BINANCE_API_SECRET = process.env.BINANCE_API_SECRET;
 
-// 🔒 Senha simples para proteger o acesso (você escolhe)
-const ACCESS_TOKEN = "Mare492100";
-
-// Teste básico
-app.get("/", (req, res) => res.send("Servidor Binance rodando com sucesso!"));
-
-// Endpoint para consultar o saldo
+// Endpoint protegido
 app.get("/saldo", async (req, res) => {
-  if (req.query.token !== ACCESS_TOKEN) {
-    return res.status(401).json({ erro: "Token inválido" });
+  const token = req.query.token;
+  if (token !== ACCESS_TOKEN) {
+    return res.status(401).json({ erro: "Acesso não autorizado" });
   }
 
   try {
     const timestamp = Date.now();
-    const query = `timestamp=${timestamp}`;
+    const queryString = `timestamp=${timestamp}`;
     const signature = crypto
       .createHmac("sha256", BINANCE_API_SECRET)
-      .update(query)
+      .update(queryString)
       .digest("hex");
 
-    const response = await axios.get(
-      `https://api1.binance.com/api/v3/account?${query}&signature=${signature}`,
-      { headers: { "X-MBX-APIKEY": BINANCE_API_KEY } }
-    );
+    const url = `https://api.binance.com/api/v3/account?${queryString}&signature=${signature}`;
 
-    // Filtra apenas as moedas com saldo > 0
-    const ativos = response.data.balances
+    const response = await axios.get(url, {
+      headers: { "X-MBX-APIKEY": BINANCE_API_KEY },
+    });
+
+    const balances = response.data.balances
       .filter((b) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0)
       .map((b) => ({
-        moeda: b.asset,
-        livre: b.free,
-        bloqueado: b.locked,
+        asset: b.asset,
+        free: b.free,
+        locked: b.locked,
       }));
 
-    res.json(ativos);
-  } catch (err) {
-    console.error(err.message);
+    res.json(balances);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
     res.status(500).json({ erro: "Erro ao consultar Binance" });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Servidor online na porta", PORT));
+app.listen(port, () => console.log(`✅ Servidor rodando na porta ${port}`));
